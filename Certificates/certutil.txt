@@ -1,0 +1,124 @@
+C:\Users\Administrator\Desktop>certutil -f -urlfetch -verify 540101071BB9AE22423AD206529A9B2D.cer
+Issuer:
+    C=VN
+    O=Cong ty co phan chu ky so VI NA
+    OU=Cong ty co phan chu ky so VI NA
+    CN=SmartSign
+  Name Hash(sha1): e0dd4d2a1caf2aeb896e5d9921e286ad1762f7e6
+  Name Hash(md5): baa6318f24df39da0eddf4c98fb3f2b7
+Subject:
+    OID.0.9.2342.19200300.100.1.1=MST:5800577571
+    CN=CÔNG TY CỔ PHẦN XÂY DỰNG VÀ LẮP MÁY TRUNG NAM
+    S=Lâm Đồng
+    C=VN
+  Name Hash(sha1): 2e1d288c52b093261de72142727364db77247420
+  Name Hash(md5): 442dd783ba292007313e1203f5d06e5a
+Cert Serial Number: 540101071bb9ae22423ad206529a9b2d
+
+dwFlags = CA_VERIFY_FLAGS_ALLOW_UNTRUSTED_ROOT (0x1)
+dwFlags = CA_VERIFY_FLAGS_IGNORE_OFFLINE (0x2)
+dwFlags = CA_VERIFY_FLAGS_FULL_CHAIN_REVOCATION (0x8)
+dwFlags = CA_VERIFY_FLAGS_CONSOLE_TRACE (0x20000000)
+dwFlags = CA_VERIFY_FLAGS_DUMP_CHAIN (0x40000000)
+ChainFlags = CERT_CHAIN_REVOCATION_CHECK_CHAIN (0x20000000)
+HCCE_LOCAL_MACHINE
+CERT_CHAIN_POLICY_BASE
+-------- CERT_CHAIN_CONTEXT --------
+ChainContext.dwInfoStatus = CERT_TRUST_HAS_PREFERRED_ISSUER (0x100)
+
+SimpleChain.dwInfoStatus = CERT_TRUST_HAS_PREFERRED_ISSUER (0x100)
+
+CertContext[0][0]: dwInfoStatus=102 dwErrorStatus=0
+  Issuer: C=VN, O=Cong ty co phan chu ky so VI NA, OU=Cong ty co phan chu ky so VI NA, CN=SmartSign
+  NotBefore: 03/10/2023 2:04 PM
+  NotAfter: 03/12/2024 2:04 PM
+  Subject: OID.0.9.2342.19200300.100.1.1=MST:5800577571, CN=CÔNG TY CỔ PHẦN XÂY DỰNG VÀ LẮP MÁY TRUNG NAM, S=Lâm Đồng, C=VN
+  Serial: 540101071bb9ae22423ad206529a9b2d
+  Cert: 1def2bb3a3328313d3d8614c1a019c5e79758a66
+  Element.dwInfoStatus = CERT_TRUST_HAS_KEY_MATCH_ISSUER (0x2)
+  Element.dwInfoStatus = CERT_TRUST_HAS_PREFERRED_ISSUER (0x100)
+  ----------------  Certificate AIA  ----------------
+  Verified "Certificate (0)" Time: 0 9c9f0ee4744776ecd42628039eea6760e4a6ddb6
+    [0.0] https://smartsign.com.vn/SmartSign-2023.crt
+
+  ----------------  Certificate CDP  ----------------
+  Verified "Base CRL (19f3)" Time: 0 3092de446fb3e9c805d8c2fe1e08b87c3e1bd02f
+    [0.0] http://crl1.smartsign.com.vn
+
+  ----------------  Base CRL CDP  ----------------
+  No URLs "None" Time: 0 (null)
+  ----------------  Certificate OCSP  ----------------
+  Expired "OCSP" Time: 0 5abba1ca3b0d8287247cf9fb2c1a3331350b36df
+    [0.0] http://ocsp1.smartsign.com.vn
+
+  --------------------------------
+    CRL (null):
+    Issuer: CN=OCSP Responder
+    ThisUpdate: 14/11/2024 4:22 PM
+    NextUpdate: 15/11/2024 4:22 AM
+    CRL: 8a0a2f5a033b0140367b05428758b47da9daba61
+  Application[0] = 1.3.6.1.5.5.7.3.2 Client Authentication
+  Application[1] = 1.3.6.1.5.5.7.3.4 Secure Email
+  Application[2] = 1.3.6.1.4.1.311.10.3.12 Document Signing
+  Application[3] = 1.2.840.113583.1.1.5
+
+CertContext[0][1]: dwInfoStatus=101 dwErrorStatus=0
+  Issuer: CN=Vietnam National Root CA, OU=National Centre of Digital Signature Authentication, O=Ministry of Information and Communications, C=VN
+  NotBefore: 24/02/2023 11:19 AM
+  NotAfter: 24/02/2028 11:19 AM
+  Subject: C=VN, O=Cong ty co phan chu ky so VI NA, OU=Cong ty co phan chu ky so VI NA, CN=SmartSign
+  Serial: c10a7ab706ea29b6af0a94f0f742b2ba
+  Cert: 9c9f0ee4744776ecd42628039eea6760e4a6ddb6
+  Element.dwInfoStatus = CERT_TRUST_HAS_EXACT_MATCH_ISSUER (0x1)
+  Element.dwInfoStatus = CERT_TRUST_HAS_PREFERRED_ISSUER (0x100)
+  ----------------  Certificate AIA  ----------------
+  Verified "Certificate (0)" Time: 0 8ea95975898efef73b5ca92bf03f712bfbc7615f
+    [0.0] https://rootca.gov.vn/crt/vnrca256.p7b
+
+  ----------------  Certificate CDP  ----------------
+  Verified "Base CRL (18)" Time: 0 a23eb51d74731298fe0fdc23a947dfbabfb6a3dc
+    [0.0] https://rootca.gov.vn/crl/vnrca256.crl
+
+  ----------------  Base CRL CDP  ----------------
+  No URLs "None" Time: 0 (null)
+  ----------------  Certificate OCSP  ----------------
+  No URLs "None" Time: 0 (null)
+  --------------------------------
+    CRL 18:
+    Issuer: CN=Vietnam National Root CA, OU=National Centre of Digital Signature Authentication, O=Ministry of Information and Communications, C=VN
+    ThisUpdate: 28/06/2024 3:09 PM
+    NextUpdate: 27/12/2024 3:07 PM
+    CRL: a23eb51d74731298fe0fdc23a947dfbabfb6a3dc
+
+CertContext[0][2]: dwInfoStatus=109 dwErrorStatus=0
+  Issuer: CN=Vietnam National Root CA, OU=National Centre of Digital Signature Authentication, O=Ministry of Information and Communications, C=VN
+  NotBefore: 15/04/2014 11:29 PM
+  NotAfter: 15/04/2039 11:29 PM
+  Subject: CN=Vietnam National Root CA, OU=National Centre of Digital Signature Authentication, O=Ministry of Information and Communications, C=VN
+  Serial: 9592bb8ceead5a24a6b8f71d7d323b5a
+  Cert: 8ea95975898efef73b5ca92bf03f712bfbc7615f
+  Element.dwInfoStatus = CERT_TRUST_HAS_EXACT_MATCH_ISSUER (0x1)
+  Element.dwInfoStatus = CERT_TRUST_IS_SELF_SIGNED (0x8)
+  Element.dwInfoStatus = CERT_TRUST_HAS_PREFERRED_ISSUER (0x100)
+  ----------------  Certificate AIA  ----------------
+  No URLs "None" Time: 0 (null)
+  ----------------  Certificate CDP  ----------------
+  No URLs "None" Time: 0 (null)
+  ----------------  Certificate OCSP  ----------------
+  No URLs "None" Time: 0 (null)
+  --------------------------------
+
+Exclude leaf cert:
+  Chain: 0a8cc668b5e1ea10762ac45d9d9d515039804421
+Full chain:
+  Chain: de1e6c191e48093b7417b29061e6420ca39d2a03
+------------------------------------
+Verified Issuance Policies: None
+Verified Application Policies:
+    1.3.6.1.5.5.7.3.2 Client Authentication
+    1.3.6.1.5.5.7.3.4 Secure Email
+    1.3.6.1.4.1.311.10.3.12 Document Signing
+    1.2.840.113583.1.1.5
+Cert is an End Entity certificate
+Leaf certificate revocation check passed
+CertUtil: -verify command completed successfully.

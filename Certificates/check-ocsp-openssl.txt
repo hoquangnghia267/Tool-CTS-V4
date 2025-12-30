@@ -1,0 +1,7 @@
+openssl ocsp -issuer smartsign2017-2022.cer -CAfile smartsign2017-2022.cer -cert 540869DF6F64F708B2F1433B76CDBC7C.cer -req_text -url http://192.168.7.81:8080/ejbca/publicweb/status/ocsp
+
+openssl ocsp -issuer smartsign2020-2025.cer -CAfile smartsign2020-2025.cer -cert 540101074939560B68CDDC8DCA0C574D.pem -req_text -url http://192.168.7.81:8080/ejbca/publicweb/status/ocsp
+
+
+openssl ocsp -issuer smartsign2020-2025.cer -CAfile smartsign2020-2025.cer -cert 540101070CD12CEFD53B743D6B5C1244.cer -req_text -url http://192.168.3.120:8080/ejbca/publicweb/status/ocsp
+

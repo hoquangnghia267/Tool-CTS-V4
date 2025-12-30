@@ -1,0 +1,9 @@
+# Check OCSP
+certutil -f -urlfetch -verify 5401010759E2F4C8C4A6E1BB9B446B07.cer
+
+# Convert CRL -> test
+certutil -dump 1.crl > 1.txt
+
+# Check OCSP
+
+openssl ocsp -issuer smartsign2023-2028.cer -cert nghiatestcmc.cer -text -url http://ocsp1.smartsign.com.vn

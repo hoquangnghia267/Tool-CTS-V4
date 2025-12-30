@@ -97,45 +97,61 @@ def open_get_serial_from_taxcode(parent, conn, section_name):
     position_x = int(parent_x + (parent_width / 2) - (window_width / 2))
     position_y = int(parent_y + (parent_height / 2) - (window_height / 2))
     search_window.geometry(f"{window_width}x{window_height}+{position_x}+{position_y}")
-    # --- End Centering ---
 
+    is_extended_view = section_name in ["localejbca", "CAv7"]
+
+    # --- Search Input ---
     search_label = tk.Label(search_window, text="Enter tax code or certificate information:", font=("Helvetica", 12))
     search_label.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="w")
-
-    search_input = tk.Text(search_window, width=25, height=1, font=("Helvetica", 12))
+    search_input = tk.Text(search_window, width=40, height=1, font=("Helvetica", 12))
     search_input.grid(row=1, column=0, padx=10, pady=5, sticky="w")
 
-    frame_table = tk.Frame(search_window)
-    frame_table.grid(row=3, column=0, padx=10, pady=10, sticky="nsew")
+    # --- Conditional Date Filter ---
+    if is_extended_view:
+        date_filter_frame = tk.Frame(search_window)
+        date_filter_frame.grid(row=2, column=0, padx=10, pady=5, sticky="w")
 
-    search_window.grid_rowconfigure(3, weight=1)
+        tk.Label(date_filter_frame, text="Filter by 'Valid from' date:", font=("Helvetica", 12)).grid(row=0, column=0, columnspan=4)
+        
+        tk.Label(date_filter_frame, text="From:", font=("Helvetica", 10)).grid(row=1, column=0, padx=(0, 5))
+        from_date_entry = tk.Entry(date_filter_frame, width=12, font=("Helvetica", 10))
+        from_date_entry.grid(row=1, column=1, padx=(0, 10))
+
+        tk.Label(date_filter_frame, text="To:", font=("Helvetica", 10)).grid(row=1, column=2, padx=(0, 5))
+        to_date_entry = tk.Entry(date_filter_frame, width=12, font=("Helvetica", 10))
+        to_date_entry.grid(row=1, column=3, padx=(0, 10))
+        
+        tk.Label(date_filter_frame, text="Format: YYYY-MM-DD", font=("Helvetica", 8, "italic")).grid(row=2, column=0, columnspan=4, pady=(5,0))
+
+    # --- Search Button ---
+    search_button_row = 3 if is_extended_view else 2
+    search_button = tk.Button(search_window, text="Search", font=("Helvetica", 12, "bold"), width=12, command=lambda: do_search())
+    search_button.grid(row=search_button_row, column=0, pady=10)
+
+    # --- Results Table ---
+    table_row = 4 if is_extended_view else 3
+    frame_table = tk.Frame(search_window)
+    frame_table.grid(row=table_row, column=0, padx=10, pady=10, sticky="nsew")
+    search_window.grid_rowconfigure(table_row, weight=1)
     search_window.grid_columnconfigure(0, weight=1)
 
-    # --- Conditional Columns ---
-    is_extended_view = section_name in ["localejbca", "CAv7"]
     if is_extended_view:
         columns = ("Serial Number", "Valid from", "Valid to", "Status", "Username", "SubjectDN")
     else:
         columns = ("Serial Number", "Expire Date", "Status", "Username", "SubjectDN")
     
-    # --- Layout for Treeview and Scrollbars ---
     scrollbar_y = ttk.Scrollbar(frame_table, orient="vertical")
     scrollbar_x = ttk.Scrollbar(frame_table, orient="horizontal")
-
     tree = ttk.Treeview(frame_table, columns=columns, show="headings", height=25,
                         yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set)
-
     scrollbar_y.config(command=tree.yview)
     scrollbar_x.config(command=tree.xview)
-    
     tree.grid(row=0, column=0, sticky='nsew')
     scrollbar_y.grid(row=0, column=1, sticky='ns')
     scrollbar_x.grid(row=1, column=0, sticky='ew')
-
     frame_table.grid_rowconfigure(0, weight=1)
     frame_table.grid_columnconfigure(0, weight=1)
     
-    # --- Column Configuration ---
     tree.column("Serial Number", width=250, anchor="w")
     if is_extended_view:
         tree.column("Valid from", width=150, anchor="w")
@@ -166,7 +182,20 @@ def open_get_serial_from_taxcode(parent, conn, section_name):
             messagebox.showwarning("Warning", "Please enter a search term.")
             return
 
-        results = search_certificates_by_subject(conn, search_term, section_name)
+        start_date = None
+        end_date = None
+        if is_extended_view:
+            start_date = from_date_entry.get()
+            end_date = to_date_entry.get()
+            # Basic validation for date format
+            try:
+                if start_date: datetime.strptime(start_date, '%Y-%m-%d')
+                if end_date: datetime.strptime(end_date, '%Y-%m-%d')
+            except ValueError:
+                messagebox.showerror("Invalid Date", "Date format must be YYYY-MM-DD.")
+                return
+
+        results = search_certificates_by_subject(conn, search_term, section_name, start_date, end_date)
 
         if not results:
             messagebox.showinfo("Information", "No matching data found.")
@@ -186,9 +215,6 @@ def open_get_serial_from_taxcode(parent, conn, section_name):
                 values = (serial_hex, expire_date_gmt7, status, username, subject_dn)
             
             tree.insert("", tk.END, values=values)
-
-    search_button = tk.Button(search_window, text="Search", font=("Helvetica", 12, "bold"), width=12, command=do_search)
-    search_button.grid(row=2, column=0, pady=10)
 
     def copy_serial_keyboard(event=None):
         selected_items = tree.selection()

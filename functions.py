@@ -125,6 +125,25 @@ def get_current_timestamp_in_gmt_plus_7():
     current_timestamp_gmt_plus_7 = int(current_gmt_plus_7_time.timestamp() * 1000)
     
     return current_timestamp_gmt_plus_7
+
+
+def date_str_to_timestamp(date_str, end_of_day=False):
+    """Converts a YYYY-MM-DD string to a millisecond timestamp."""
+    if not date_str:
+        return None
+    try:
+        if end_of_day:
+            # Set time to the end of the day
+            dt = datetime.strptime(date_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+        else:
+            # Set time to the beginning of the day
+            dt = datetime.strptime(date_str, "%Y-%m-%d")
+        
+        # Assume the input date is for the local timezone, then convert to timestamp
+        return int(dt.timestamp() * 1000)
+    except (ValueError, TypeError):
+        return None
+
     
 #-----CTS-----
 def query_info_cts(conn, decimal_serials):
@@ -689,42 +708,46 @@ def off_notifications_tms2(conn, token_hid, logger):
         messagebox.showerror("Error", f"An error occurred: {str(e)}")
 
 #-----CTS-----
-def search_certificates_by_subject(conn, search_term, section_name):
+def search_certificates_by_subject(conn, search_term, section_name, start_date_str=None, end_date_str=None):
     """
-    Searches for certificates in the database based on a keyword in the SubjectDN.
-    Conditionally fetches 'notBefore' based on the section name.
-
+    Searches for certificates based on a keyword and optionally a date range for 'notBefore'.
     Args:
         conn: The database connection object.
-        search_term: The keyword to search for (e.g., tax code).
+        search_term: The keyword to search for.
         section_name: The name of the connection section.
-
+        start_date_str: The start date in 'YYYY-MM-DD' format.
+        end_date_str: The end date in 'YYYY-MM-DD' format.
     Returns:
-        A list of tuples containing certificate data, or an empty list if not found.
+        A list of tuples containing certificate data.
     """
     if not search_term:
         return []
 
     try:
         cursor = conn.cursor()
+        params = [f"%{search_term}%"]
         
-        # Conditionally build the query
         if section_name in ["localejbca", "CAv7"]:
-            query = """
-                SELECT serialNumber, expireDate, status, username, subjectDN, notBefore
-                FROM CertificateData
-                WHERE subjectDN LIKE %s
-                ORDER BY expireDate ASC
-            """
-        else:
-            query = """
-                SELECT serialNumber, expireDate, status, username, subjectDN
-                FROM CertificateData
-                WHERE subjectDN LIKE %s
-                ORDER BY expireDate ASC
-            """
+            base_query = "SELECT serialNumber, expireDate, status, username, subjectDN, notBefore FROM CertificateData"
+            where_clauses = ["subjectDN LIKE %s"]
+
+            start_ts = date_str_to_timestamp(start_date_str)
+            if start_ts:
+                where_clauses.append("notBefore >= %s")
+                params.append(start_ts)
+
+            end_ts = date_str_to_timestamp(end_date_str, end_of_day=True)
+            if end_ts:
+                where_clauses.append("notBefore <= %s")
+                params.append(end_ts)
             
-        cursor.execute(query, (f"%{search_term}%",))
+            query = f"{base_query} WHERE {' AND '.join(where_clauses)} ORDER BY expireDate ASC"
+        else:
+            base_query = "SELECT serialNumber, expireDate, status, username, subjectDN FROM CertificateData"
+            where_clauses = ["subjectDN LIKE %s"]
+            query = f"{base_query} WHERE {' AND '.join(where_clauses)} ORDER BY expireDate ASC"
+        
+        cursor.execute(query, tuple(params))
         results = cursor.fetchall()
         cursor.close()
         return results

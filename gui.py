@@ -7,7 +7,7 @@ from tkinter import messagebox
 from tkinter import scrolledtext
 from functions import (check_certificate_status, convert_timestamp_to_gmt7, decimal_to_hex, export_base64_certificates, get_text_data, get_text_single, note_hotro_tms1, query_info_cts, update_revoked_list, update_revoked_list_new, update_revoked_list_force,
                        block_tms1, block_tms2, unblock_tms1, unblock_tms2, notifications_tms2, off_notifications_tms1, off_notifications_tms2, 
-                       get_serial_from_taxcode, query_cts_theo_tinh, notifications_tms1, get_info_TMS1, get_info_TMS2, update_unrevoked_list, hex_to_decimal)
+                       search_certificates_by_subject, query_cts_theo_tinh, notifications_tms1, get_info_TMS1, get_info_TMS2, update_unrevoked_list, hex_to_decimal)
 from tkinter import filedialog
 
 # Các hàm chức năng của ứng dụng
@@ -78,103 +78,133 @@ def open_check_certificate_status(parent):
 #     get_result_text.grid(row=3, column=0, padx=10, pady=10)
 
 
-def open_get_serial_from_taxcode(parent, conn):
-    update_window = tk.Toplevel(parent)
-    update_window.title("Get Serial Number")
-    update_window.geometry("1650x1000")
+def open_get_serial_from_taxcode(parent, conn, section_name):
+    """
+    Opens a window to search for certificates.
+    The view is conditional based on the section_name.
+    """
+    search_window = tk.Toplevel(parent)
+    search_window.title("Certificate Search")
+    
+    # --- Center The Window ---
+    parent.update_idletasks()
+    window_width = 1500
+    window_height = 900
+    parent_x = parent.winfo_x()
+    parent_y = parent.winfo_y()
+    parent_width = parent.winfo_width()
+    parent_height = parent.winfo_height()
+    position_x = int(parent_x + (parent_width / 2) - (window_width / 2))
+    position_y = int(parent_y + (parent_height / 2) - (window_height / 2))
+    search_window.geometry(f"{window_width}x{window_height}+{position_x}+{position_y}")
+    # --- End Centering ---
 
-    taxcode_label = tk.Label(update_window, text="Enter tax code or certificate information:", font=("Helvetica", 12))
-    taxcode_label.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="w")
+    search_label = tk.Label(search_window, text="Enter tax code or certificate information:", font=("Helvetica", 12))
+    search_label.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="w")
 
-    taxcode_text = tk.Text(update_window, width=25, height=1, font=("Helvetica", 12))
-    taxcode_text.grid(row=1, column=0, padx=10, pady=5, sticky="w")
+    search_input = tk.Text(search_window, width=25, height=1, font=("Helvetica", 12))
+    search_input.grid(row=1, column=0, padx=10, pady=5, sticky="w")
 
-    frame_table = tk.Frame(update_window)
+    frame_table = tk.Frame(search_window)
     frame_table.grid(row=3, column=0, padx=10, pady=10, sticky="nsew")
 
-    update_window.grid_rowconfigure(3, weight=1)
-    update_window.grid_columnconfigure(0, weight=1)
+    search_window.grid_rowconfigure(3, weight=1)
+    search_window.grid_columnconfigure(0, weight=1)
 
-    columns = ("Serial Number", "Expire Date", "Status", "Username", "SubjectDN")
-    tree = ttk.Treeview(frame_table, columns=columns, show="headings", height=25)
-    tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    # --- Conditional Columns ---
+    is_extended_view = section_name in ["localejbca", "CAv7"]
+    if is_extended_view:
+        columns = ("Serial Number", "Valid from", "Valid to", "Status", "Username", "SubjectDN")
+    else:
+        columns = ("Serial Number", "Expire Date", "Status", "Username", "SubjectDN")
+    
+    # --- Layout for Treeview and Scrollbars ---
+    scrollbar_y = ttk.Scrollbar(frame_table, orient="vertical")
+    scrollbar_x = ttk.Scrollbar(frame_table, orient="horizontal")
 
-    scrollbar_y = ttk.Scrollbar(frame_table, orient="vertical", command=tree.yview)
-    scrollbar_y.pack(side=tk.RIGHT, fill=tk.Y)
-    tree.configure(yscrollcommand=scrollbar_y.set)
+    tree = ttk.Treeview(frame_table, columns=columns, show="headings", height=25,
+                        yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set)
 
-    # 👉 Đặt độ rộng cột thủ công
+    scrollbar_y.config(command=tree.yview)
+    scrollbar_x.config(command=tree.xview)
+    
+    tree.grid(row=0, column=0, sticky='nsew')
+    scrollbar_y.grid(row=0, column=1, sticky='ns')
+    scrollbar_x.grid(row=1, column=0, sticky='ew')
+
+    frame_table.grid_rowconfigure(0, weight=1)
+    frame_table.grid_columnconfigure(0, weight=1)
+    
+    # --- Column Configuration ---
     tree.column("Serial Number", width=250, anchor="w")
-    tree.column("Expire Date",  width=150, anchor="w")
-    tree.column("Status",       width=50, anchor="w")
-    tree.column("Username",     width=200, anchor="w")
-    tree.column("SubjectDN",    width=1000, anchor="w")
+    if is_extended_view:
+        tree.column("Valid from", width=150, anchor="w")
+        tree.column("Valid to", width=150, anchor="w")
+    else:
+        tree.column("Expire Date", width=150, anchor="w")
+    tree.column("Status", width=80, anchor="w")
+    tree.column("Username", width=200, anchor="w")
+    tree.column("SubjectDN", width=1000, anchor="w")
 
-    # Ghi nhớ trạng thái sort
-    sort_state = {col: False for col in columns}  # False = A→Z, True = Z→A
+    sort_state = {col: False for col in columns}
 
     def sort_column(col):
         data = [(tree.set(item, col), item) for item in tree.get_children("")]
-        data.sort(reverse=sort_state[col])  # sort theo trạng thái hiện tại
-
+        data.sort(reverse=sort_state[col])
         for index, (_, item) in enumerate(data):
             tree.move(item, "", index)
+        sort_state[col] = not sort_state[col]
 
-        sort_state[col] = not sort_state[col]  # đảo trạng thái (A→Z <-> Z→A)
-
-    # Gắn tiêu đề cột có click để sort
     for col in columns:
         tree.heading(col, text=col, anchor="w", command=lambda c=col: sort_column(c))
 
-    # Hàm tìm kiếm
     def do_search():
+        """Performs the search and displays results in the Treeview."""
         tree.delete(*tree.get_children())
-        taxcode = get_text_single(taxcode_text)
-        if not taxcode:
-            messagebox.showwarning("Cảnh báo", "Vui lòng nhập mã số thuế.")
+        search_term = get_text_single(search_input)
+        if not search_term:
+            messagebox.showwarning("Warning", "Please enter a search term.")
             return
 
-        cursor = conn.cursor()
-        query = """
-            SELECT serialNumber, expireDate, status, username, subjectDN
-            FROM CertificateData
-            WHERE subjectDN LIKE %s
-            ORDER BY expireDate ASC
-        """
-        cursor.execute(query, (f"%{taxcode}%",))
-        results = cursor.fetchall()
-        cursor.close()
+        results = search_certificates_by_subject(conn, search_term, section_name)
 
         if not results:
-            messagebox.showinfo("Thông báo", "Không tìm thấy dữ liệu.")
+            messagebox.showinfo("Information", "No matching data found.")
             return
 
         for row in results:
             serial_hex = decimal_to_hex(row[0])
-            expire_gmt7 = convert_timestamp_to_gmt7(row[1])
-            tree.insert("", tk.END, values=(serial_hex, expire_gmt7, row[2], row[3], row[4]))
+            expire_date_gmt7 = convert_timestamp_to_gmt7(row[1])
+            status = row[2]
+            username = row[3]
+            subject_dn = row[4]
+            
+            if is_extended_view:
+                valid_from_gmt7 = convert_timestamp_to_gmt7(row[5])
+                values = (serial_hex, valid_from_gmt7, expire_date_gmt7, status, username, subject_dn)
+            else:
+                values = (serial_hex, expire_date_gmt7, status, username, subject_dn)
+            
+            tree.insert("", tk.END, values=values)
 
-    # Nút Search
-    search_button = tk.Button(
-        update_window,
-        text="Search",
-        font=("Helvetica", 12, "bold"),
-        width=12,
-        command=do_search
-    )
+    search_button = tk.Button(search_window, text="Search", font=("Helvetica", 12, "bold"), width=12, command=do_search)
     search_button.grid(row=2, column=0, pady=10)
 
-    #Hàm copy serial khi bấm Ctrl+C
     def copy_serial_keyboard(event=None):
-        selected_item = tree.selection()
-        if selected_item:
-            serial_number = tree.item(selected_item[0], "values")[0]
-            update_window.clipboard_clear()
-            update_window.clipboard_append(serial_number)
-            update_window.update()    
+        selected_items = tree.selection()
+        if selected_items:
+            serials_to_copy = []
+            for item_id in selected_items:
+                serial_number = tree.item(item_id, "values")[0]
+                serials_to_copy.append(serial_number)
+            if serials_to_copy:
+                clipboard_content = "\n".join(serials_to_copy)
+                search_window.clipboard_clear()
+                search_window.clipboard_append(clipboard_content)
+                search_window.update()
 
-    update_window.bind("<Return>", lambda event: do_search())
-    update_window.bind("<Control-c>", copy_serial_keyboard)
+    search_window.bind("<Return>", lambda event: do_search())
+    search_window.bind("<Control-c>", copy_serial_keyboard)
 
 
 

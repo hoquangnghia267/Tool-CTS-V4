@@ -689,30 +689,48 @@ def off_notifications_tms2(conn, token_hid, logger):
         messagebox.showerror("Error", f"An error occurred: {str(e)}")
 
 #-----CTS-----
-def get_serial_from_taxcode(conn, taxcode, get_result_text):
-    if taxcode is not None:
+def search_certificates_by_subject(conn, search_term, section_name):
+    """
+    Searches for certificates in the database based on a keyword in the SubjectDN.
+    Conditionally fetches 'notBefore' based on the section name.
+
+    Args:
+        conn: The database connection object.
+        search_term: The keyword to search for (e.g., tax code).
+        section_name: The name of the connection section.
+
+    Returns:
+        A list of tuples containing certificate data, or an empty list if not found.
+    """
+    if not search_term:
+        return []
+
+    try:
         cursor = conn.cursor()
-        query = "SELECT serialNumber, expireDate, status, username, subjectDN FROM CertificateData WHERE subjectDN LIKE %s ORDER BY expireDate DESC;"
-        cursor.execute(query, (f"%{taxcode}%",))
-        results = cursor.fetchall()
-        if results:
-            result_str = ""
-            for row in results:
-                serial_dec = row[0]
-                serial_hex = decimal_to_hex(serial_dec)
-                expire_date = row[1]
-                expire_date_gmt7 = convert_timestamp_to_gmt7(expire_date)
-                status = row[2]
-                username = row[3]
-                subjectdn = row[4]                    
-                result_str += f"Serial Number: {serial_hex}\nExpire Date: {expire_date_gmt7}\nStatus: {status}\nUsername: {username}\nSubjectDN: {subjectdn}\n--------------\n"
-            get_result_text.config(state=tk.NORMAL)
-            get_result_text.delete(1.0, tk.END)
-            get_result_text.insert(tk.END, result_str)
-            get_result_text.config(state=tk.DISABLED)
+        
+        # Conditionally build the query
+        if section_name in ["localejbca", "CAv7"]:
+            query = """
+                SELECT serialNumber, expireDate, status, username, subjectDN, notBefore
+                FROM CertificateData
+                WHERE subjectDN LIKE %s
+                ORDER BY expireDate ASC
+            """
         else:
-            messagebox.showinfo("Thông báo", "Không tìm thấy MST đã nhập.")       
+            query = """
+                SELECT serialNumber, expireDate, status, username, subjectDN
+                FROM CertificateData
+                WHERE subjectDN LIKE %s
+                ORDER BY expireDate ASC
+            """
+            
+        cursor.execute(query, (f"%{search_term}%",))
+        results = cursor.fetchall()
         cursor.close()
+        return results
+    except mysql.connector.Error as err:
+        messagebox.showerror("Database Error", f"An error occurred during query: {err}")
+        return []
 
 
 def query_database(conn, serial_entry, result_text):

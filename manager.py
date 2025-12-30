@@ -159,7 +159,7 @@ def create_gui(section_name, conn):
     check_ocsp_button = tk.Button(menu_frame, text="Check OCSP", command=lambda: open_check_certificate_status(root))
     check_ocsp_button.pack(side=tk.TOP, fill=tk.X)
 
-    search_serial_button = tk.Button(menu_frame, text="Search Taxcode", command=lambda: open_get_serial_from_taxcode(root, conn))
+    search_serial_button = tk.Button(menu_frame, text="Certificate Search", command=lambda: open_get_serial_from_taxcode(root, conn, section_name))
     search_serial_button.pack(side=tk.TOP, fill=tk.X)
 
     search_multiple_cert = tk.Button(menu_frame, text="Check multiple certificates", command=lambda: open_query_list_serial(root, conn))

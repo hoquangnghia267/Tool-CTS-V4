@@ -111,7 +111,8 @@ def open_get_serial_from_taxcode(parent, conn, section_name):
         date_filter_frame = tk.Frame(search_window)
         date_filter_frame.grid(row=2, column=0, padx=10, pady=5, sticky="w")
 
-        tk.Label(date_filter_frame, text="Filter by 'Valid from' date:", font=("Helvetica", 12)).grid(row=0, column=0, columnspan=4)
+        # --- Valid From Filter ---
+        tk.Label(date_filter_frame, text="Filter by 'Valid from' date:", font=("Helvetica", 10, "bold")).grid(row=0, column=0, columnspan=4, sticky="w")
         
         tk.Label(date_filter_frame, text="From:", font=("Helvetica", 10)).grid(row=1, column=0, padx=(0, 5))
         from_date_entry = tk.Entry(date_filter_frame, width=12, font=("Helvetica", 10))
@@ -120,8 +121,22 @@ def open_get_serial_from_taxcode(parent, conn, section_name):
         tk.Label(date_filter_frame, text="To:", font=("Helvetica", 10)).grid(row=1, column=2, padx=(0, 5))
         to_date_entry = tk.Entry(date_filter_frame, width=12, font=("Helvetica", 10))
         to_date_entry.grid(row=1, column=3, padx=(0, 10))
-        
-        tk.Label(date_filter_frame, text="Format: YYYY-MM-DD", font=("Helvetica", 8, "italic")).grid(row=2, column=0, columnspan=4, pady=(5,0))
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        to_date_entry.insert(0, today_str)
+
+        # --- Valid To Filter ---
+        tk.Label(date_filter_frame, text="Filter by 'Valid to' date:", font=("Helvetica", 10, "bold")).grid(row=2, column=0, columnspan=4, sticky="w", pady=(10,0))
+
+        tk.Label(date_filter_frame, text="From:", font=("Helvetica", 10)).grid(row=3, column=0, padx=(0, 5))
+        expire_from_date_entry = tk.Entry(date_filter_frame, width=12, font=("Helvetica", 10))
+        expire_from_date_entry.grid(row=3, column=1, padx=(0, 10))
+
+        tk.Label(date_filter_frame, text="To:", font=("Helvetica", 10)).grid(row=3, column=2, padx=(0, 5))
+        expire_to_date_entry = tk.Entry(date_filter_frame, width=12, font=("Helvetica", 10))
+        expire_to_date_entry.grid(row=3, column=3, padx=(0, 10))
+        expire_to_date_entry.insert(0, today_str)
+
+        tk.Label(date_filter_frame, text="Format: YYYY-MM-DD", font=("Helvetica", 8, "italic")).grid(row=4, column=0, columnspan=4, pady=(5,0))
 
     # --- Search Button ---
     search_button_row = 3 if is_extended_view else 2
@@ -182,20 +197,22 @@ def open_get_serial_from_taxcode(parent, conn, section_name):
             messagebox.showwarning("Warning", "Please enter a search term.")
             return
 
-        start_date = None
-        end_date = None
+        start_date, end_date, expire_start, expire_end = None, None, None, None
         if is_extended_view:
             start_date = from_date_entry.get()
             end_date = to_date_entry.get()
-            # Basic validation for date format
+            expire_start = expire_from_date_entry.get()
+            expire_end = expire_to_date_entry.get()
             try:
                 if start_date: datetime.strptime(start_date, '%Y-%m-%d')
                 if end_date: datetime.strptime(end_date, '%Y-%m-%d')
+                if expire_start: datetime.strptime(expire_start, '%Y-%m-%d')
+                if expire_end: datetime.strptime(expire_end, '%Y-%m-%d')
             except ValueError:
                 messagebox.showerror("Invalid Date", "Date format must be YYYY-MM-DD.")
                 return
 
-        results = search_certificates_by_subject(conn, search_term, section_name, start_date, end_date)
+        results = search_certificates_by_subject(conn, search_term, section_name, start_date, end_date, expire_start, expire_end)
 
         if not results:
             messagebox.showinfo("Information", "No matching data found.")

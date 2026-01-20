@@ -708,15 +708,19 @@ def off_notifications_tms2(conn, token_hid, logger):
         messagebox.showerror("Error", f"An error occurred: {str(e)}")
 
 #-----CTS-----
-def search_certificates_by_subject(conn, search_term, section_name, start_date_str=None, end_date_str=None):
+def search_certificates_by_subject(conn, search_term, section_name, 
+                                 start_date_str=None, end_date_str=None,
+                                 expire_start_date_str=None, expire_end_date_str=None):
     """
-    Searches for certificates based on a keyword and optionally a date range for 'notBefore'.
+    Searches for certificates based on a keyword and optionally date ranges for 'notBefore' and 'expireDate'.
     Args:
         conn: The database connection object.
         search_term: The keyword to search for.
         section_name: The name of the connection section.
-        start_date_str: The start date in 'YYYY-MM-DD' format.
-        end_date_str: The end date in 'YYYY-MM-DD' format.
+        start_date_str: The start date for notBefore in 'YYYY-MM-DD' format.
+        end_date_str: The end date for notBefore in 'YYYY-MM-DD' format.
+        expire_start_date_str: The start date for expireDate in 'YYYY-MM-DD' format.
+        expire_end_date_str: The end date for expireDate in 'YYYY-MM-DD' format.
     Returns:
         A list of tuples containing certificate data.
     """
@@ -727,10 +731,13 @@ def search_certificates_by_subject(conn, search_term, section_name, start_date_s
         cursor = conn.cursor()
         params = [f"%{search_term}%"]
         
+        # Use UPPER() for case-insensitive search on the primary term
+        where_clauses = ["UPPER(subjectDN) LIKE UPPER(%s)"]
+
         if section_name in ["localejbca", "CAv7"]:
             base_query = "SELECT serialNumber, expireDate, status, username, subjectDN, notBefore FROM CertificateData"
-            where_clauses = ["subjectDN LIKE %s"]
-
+            
+            # notBefore filter
             start_ts = date_str_to_timestamp(start_date_str)
             if start_ts:
                 where_clauses.append("notBefore >= %s")
@@ -741,11 +748,20 @@ def search_certificates_by_subject(conn, search_term, section_name, start_date_s
                 where_clauses.append("notBefore <= %s")
                 params.append(end_ts)
             
-            query = f"{base_query} WHERE {' AND '.join(where_clauses)} ORDER BY expireDate ASC"
+            # expireDate filter
+            expire_start_ts = date_str_to_timestamp(expire_start_date_str)
+            if expire_start_ts:
+                where_clauses.append("expireDate >= %s")
+                params.append(expire_start_ts)
+
+            expire_end_ts = date_str_to_timestamp(expire_end_date_str, end_of_day=True)
+            if expire_end_ts:
+                where_clauses.append("expireDate <= %s")
+                params.append(expire_end_ts)
         else:
             base_query = "SELECT serialNumber, expireDate, status, username, subjectDN FROM CertificateData"
-            where_clauses = ["subjectDN LIKE %s"]
-            query = f"{base_query} WHERE {' AND '.join(where_clauses)} ORDER BY expireDate ASC"
+
+        query = f"{base_query} WHERE {' AND '.join(where_clauses)} ORDER BY expireDate ASC"
         
         cursor.execute(query, tuple(params))
         results = cursor.fetchall()

@@ -7,7 +7,7 @@ from tkinter import messagebox
 from tkinter import scrolledtext
 from functions import (check_certificate_status, convert_timestamp_to_gmt7, decimal_to_hex, export_base64_certificates, get_text_data, get_text_single, note_hotro_tms1, query_info_cts, update_revoked_list, update_revoked_list_new, update_revoked_list_force,
                        block_tms1, block_tms2, unblock_tms1, unblock_tms2, notifications_tms2, off_notifications_tms1, off_notifications_tms2, 
-                       search_certificates_by_subject, query_cts_theo_tinh, notifications_tms1, get_info_TMS1, get_info_TMS2, update_unrevoked_list, hex_to_decimal)
+                       search_certificates_by_subject, query_cts_theo_tinh, notifications_tms1, get_info_TMS1, get_info_TMS2, update_unrevoked_list, hex_to_decimal, check_serial_in_crl, download_crl)
 from tkinter import filedialog
 
 # Các hàm chức năng của ứng dụng
@@ -188,6 +188,32 @@ def open_get_serial_from_taxcode(parent, conn, section_name):
 
     for col in columns:
         tree.heading(col, text=col, anchor="w", command=lambda c=col: sort_column(c))
+
+    def on_right_click(event):
+        item = tree.identify_row(event.y)
+        column = tree.identify_column(event.x)
+        if item and column:
+            try:
+                col_index = int(column.replace("#", "")) - 1
+            except ValueError:
+                return
+
+            values = tree.item(item, "values")
+            if 0 <= col_index < len(values):
+                selected_text = values[col_index]
+                menu = tk.Menu(tree, tearoff=0)
+                menu.add_command(label="Copy", command=lambda: copy_to_clipboard(str(selected_text)))
+                menu.tk_popup(event.x_root, event.y_root)
+
+    def copy_to_clipboard(text):
+        try:
+            search_window.clipboard_clear()
+            search_window.clipboard_append(text)
+            search_window.update()
+        except Exception as e:
+            print(f"Clipboard error: {e}")
+
+    tree.bind("<Button-3>", on_right_click)
 
     def do_search():
         """Performs the search and displays results in the Treeview."""
@@ -704,6 +730,88 @@ def open_off_notifications_tms2(parent, conn, logger):
 
     update_button = tk.Button(update_window, text="Update Records", command=lambda: off_notifications_tms2(conn, get_text_data(idtoken_text), logger))
     update_button.grid(row=2, column=0, pady=20)
+
+
+def open_check_serial_in_crl_window(parent):
+    update_window = tk.Toplevel(parent)
+    update_window.title("Check Serial in CRL")
+    update_window.grab_set()
+
+    def select_crl_file():
+        crl_path = filedialog.askopenfilename(filetypes=[("CRL Files", "*.crl"), ("All Files", "*.*")])
+        if crl_path:
+            crl_path_label.config(text=crl_path)
+
+    def do_download():
+        url = url_entry.get()
+        if not url:
+            messagebox.showwarning("Warning", "Please enter a CRL URL.")
+            return
+
+        save_path = "downloaded_smartsign.crl"
+        try:
+            download_crl(url, save_path)
+            crl_path_label.config(text=save_path)
+            messagebox.showinfo("Success", "Download successful! File selected automatically.")
+        except Exception as e:
+             messagebox.showerror("Error", f"Download failed: {e}")
+
+    def do_check():
+        crl_path = crl_path_label.cget("text")
+        serial_input = get_text_single(serial_text)
+        
+        if not crl_path:
+            messagebox.showwarning("Warning", "Please select a CRL file (or download one).")
+            return
+            
+        if not serial_input:
+            messagebox.showwarning("Warning", "Please enter a serial number.")
+            return
+
+        get_result_text.config(state=tk.NORMAL)
+        get_result_text.delete("1.0", tk.END)
+        get_result_text.insert(tk.END, "Checking...\n")
+        update_window.update()
+        
+        try:
+            result = check_serial_in_crl(crl_path, serial_input)
+            get_result_text.delete("1.0", tk.END)
+            get_result_text.insert(tk.END, result)
+        except Exception as e:
+            get_result_text.delete("1.0", tk.END)
+            get_result_text.insert(tk.END, f"Error: {str(e)}")
+            
+        get_result_text.config(state=tk.DISABLED)
+
+    # --- UI Layout ---
+    
+    # URL Download Section
+    tk.Label(update_window, text="CRL URL:").grid(row=0, column=0, padx=10, pady=(10,0), sticky="w")
+    url_entry = tk.Entry(update_window, width=60)
+    url_entry.grid(row=1, column=0, padx=10, pady=5, sticky="w")
+    url_entry.insert(0, "http://crl1.smartsign.com.vn/smartsign.crl")
+    
+    tk.Button(update_window, text="Download & Use", command=do_download).grid(row=2, column=0, padx=10, pady=5, sticky="w")
+    
+    # Separator
+    ttk.Separator(update_window, orient='horizontal').grid(row=3, column=0, sticky="ew", padx=10, pady=10)
+
+    # Manual Selection Section
+    tk.Label(update_window, text="OR Select Local File:").grid(row=4, column=0, padx=10, sticky="w")
+    
+    crl_path_label = tk.Label(update_window, text="", fg="blue")
+    crl_path_label.grid(row=5, column=0, padx=10, sticky="w")
+    
+    tk.Button(update_window, text="Choose CRL File", command=select_crl_file).grid(row=6, column=0, padx=10, pady=5, sticky="w")
+
+    tk.Label(update_window, text="Serial Number (Hex/Decimal):").grid(row=7, column=0, padx=10, pady=(10,0), sticky="w")
+    serial_text = tk.Text(update_window, height=1, width=40)
+    serial_text.grid(row=8, column=0, padx=10, pady=5, sticky="w")
+
+    tk.Button(update_window, text="Check", command=do_check, font=("Helvetica", 10, "bold")).grid(row=9, column=0, padx=10, pady=10)
+
+    get_result_text = tk.Text(update_window, height=10, width=60, state=tk.DISABLED, font=("Helvetica", 10))
+    get_result_text.grid(row=10, column=0, padx=10, pady=10)
 
 
 

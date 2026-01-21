@@ -9,7 +9,7 @@ from gui import (open_check_certificate_status, open_convert_timestamp, open_exp
                  open_notifications_tms2, open_hsm_admin,
                  open_query_cts_theo_tinh, open_revoke_list, open_revoke_list_force,
                  open_unblock_tms1, open_unblock_tms2, open_unrevoke_list, 
-                 open_get_info_TMS1)
+                 open_get_info_TMS1, open_check_serial_in_crl_window)
 from functions import (open_folder, open_log_in_notepad, query_database, revoke_certificate_update, setup_logging, 
                        unrevoke_certificate_update, export_base64_cert)
 from database import get_database_config, connect_to_database
@@ -158,6 +158,9 @@ def create_gui(section_name, conn):
 
     check_ocsp_button = tk.Button(menu_frame, text="Check OCSP", command=lambda: open_check_certificate_status(root))
     check_ocsp_button.pack(side=tk.TOP, fill=tk.X)
+
+    check_crl_button = tk.Button(menu_frame, text="Check Serial in CRL", command=lambda: open_check_serial_in_crl_window(root))
+    check_crl_button.pack(side=tk.TOP, fill=tk.X)
 
     search_serial_button = tk.Button(menu_frame, text="Certificate Search", command=lambda: open_get_serial_from_taxcode(root, conn, section_name))
     search_serial_button.pack(side=tk.TOP, fill=tk.X)

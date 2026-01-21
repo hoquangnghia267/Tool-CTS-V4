@@ -1484,3 +1484,97 @@ def open_log_in_notepad(section_name, base_log_dir="log"):
         print("Không thể mở file log bằng Notepad hoặc Notepad++:", e)
 
 
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+
+def check_serial_in_crl(crl_path, serial_input_str):
+    """
+    Checks if a serial number exists in a CRL file.
+    Supports both DER and PEM CRL formats.
+    serial_input_str: Can be hex (with or without colons) or decimal string.
+    """
+    results = []
+    
+    # 1. Normalize Serial to Integer
+    target_serial_int = None
+    serial_clean = serial_input_str.strip().replace(" ", "").replace(":", "")
+    
+    try:
+        # Check if explicitly Hex or contains A-F
+        if serial_clean.lower().startswith("0x") or any(c in 'abcdefABCDEF' for c in serial_clean):
+             target_serial_int = int(serial_clean, 16)
+             results.append(f"Input interpreted as Hex: {hex(target_serial_int)}")
+        else:
+             # Ambiguous (all digits). Try Decimal.
+             target_serial_int = int(serial_clean)
+             results.append(f"Input interpreted as Decimal: {target_serial_int}")
+                 
+    except ValueError:
+        try:
+             # Retry as Hex if decimal failed
+             target_serial_int = int(serial_clean, 16)
+             results.append(f"Input interpreted as Hex: {hex(target_serial_int)}")
+        except ValueError:
+             return "Error: Invalid serial number format. Please enter Hex or Decimal."
+
+    # 2. Load CRL
+    crl = None
+    try:
+        with open(crl_path, "rb") as f:
+            crl_data = f.read()
+            
+        # Try DER first
+        try:
+            crl = x509.load_der_x509_crl(crl_data, default_backend())
+            results.append("Loaded CRL as DER format.")
+        except Exception:
+            # Try PEM
+            try:
+                crl = x509.load_pem_x509_crl(crl_data, default_backend())
+                results.append("Loaded CRL as PEM format.")
+            except Exception:
+                return "Error: Could not parse CRL file. Ensure it is a valid DER or PEM encoded CRL."
+                
+    except Exception as e:
+        return f"Error reading file: {str(e)}"
+
+    # 3. Search
+    found_entry = None
+    
+    try:
+        found_entry = crl.get_revoked_certificate_by_serial_number(target_serial_int)
+    except Exception as e:
+        for r in crl:
+            if r.serial_number == target_serial_int:
+                found_entry = r
+                break
+    
+    if found_entry:
+        results.append(f"STATUS: REVOKED")
+        # Use revocation_date_utc to avoid DeprecationWarning in newer cryptography versions
+        rev_date = getattr(found_entry, 'revocation_date_utc', found_entry.revocation_date)
+        results.append(f"Revocation Date (UTC): {rev_date}")
+        
+        try:
+            for ext in found_entry.extensions:
+                if ext.oid.dotted_string == "2.5.29.21": # Reason Code
+                    results.append(f"Reason: {ext.value.reason}")
+        except:
+            pass
+            
+    else:
+        results.append(f"STATUS: GOOD (Not found in this CRL)")
+        
+    return "\n".join(results)
+
+def download_crl(url, save_path):
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        with open(save_path, 'wb') as f:
+            f.write(response.content)
+        return save_path
+    except Exception as e:
+        raise Exception(f"Download failed: {str(e)}")
+
+

@@ -1276,8 +1276,8 @@ def check_certificate_status(cert_path, issuer_path, result_text):
             except Exception as e:
                 raise ValueError(f"Failed to extract OCSP URL: {e}")
 
-        # Create OCSP request using SHA256 for better security (updated from SHA1)
-        builder = OCSPRequestBuilder().add_certificate(cert, issuer, hashes.SHA256())
+        # Create OCSP request using SHA1 (Common for OCSP responders)
+        builder = OCSPRequestBuilder().add_certificate(cert, issuer, hashes.SHA1())
         req = builder.build()
 
         # Get OCSP server URL

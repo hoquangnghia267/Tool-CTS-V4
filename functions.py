@@ -1577,4 +1577,210 @@ def download_crl(url, save_path):
     except Exception as e:
         raise Exception(f"Download failed: {str(e)}")
 
+class MockCert:
+    def __init__(self, serial_number):
+        self.serial_number = serial_number
+
+def check_ocsp_by_serial(serial_hex, issuer_path, ocsp_url):
+    try:
+        # Convert hex serial to int
+        serial_int = int(serial_hex.replace(" ", "").replace(":", ""), 16)
+        
+        # Load Issuer Cert
+        with open(issuer_path, "rb") as f:
+            pem_issuer = f.read()
+        issuer = load_pem_x509_certificate(pem_issuer)
+        
+        # Create Mock Cert
+        mock_cert = MockCert(serial_int)
+        
+        # Build Request (SHA1)
+        builder = OCSPRequestBuilder().add_certificate(mock_cert, issuer, hashes.SHA1())
+        req = builder.build()
+        
+        # Send Request
+        headers = {'Content-Type': 'application/ocsp-request'}
+        response = requests.post(ocsp_url, data=req.public_bytes(serialization.Encoding.DER), headers=headers, timeout=10)
+        
+        if response.status_code != 200:
+            return f"Error: HTTP {response.status_code}"
+            
+        ocsp_resp = load_der_ocsp_response(response.content)
+        
+        # Format Result
+        lines = []
+        lines.append(f"----- OCSP Check for Serial: {serial_hex} -----")
+        lines.append(f"Response Status: {ocsp_resp.response_status.name}")
+        
+        if ocsp_resp.response_status == OCSPResponseStatus.SUCCESSFUL:
+            lines.append(f"Cert Status: {ocsp_resp.certificate_status.name}")
+            
+            if ocsp_resp.certificate_status == OCSPCertStatus.REVOKED:
+                 # Adjust timezone +7
+                tz_offset = timedelta(hours=7)
+                rev_time = ocsp_resp.revocation_time_utc + tz_offset
+                lines.append(f"Revocation Time (GMT+7): {rev_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                if ocsp_resp.revocation_reason:
+                    lines.append(f"Reason: {ocsp_resp.revocation_reason.name}")
+            
+            # This Update / Next Update
+            tz_offset = timedelta(hours=7)
+            this_up = ocsp_resp.this_update_utc + tz_offset
+            lines.append(f"This Update (GMT+7): {this_up.strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            if ocsp_resp.next_update_utc:
+                next_up = ocsp_resp.next_update_utc + tz_offset
+                lines.append(f"Next Update (GMT+7): {next_up.strftime('%Y-%m-%d %H:%M:%S')}")
+                
+        return "\n".join(lines)
+
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+def get_cert_object_from_db(conn, serial_hex):
+    """Retrieves the certificate from the database and returns a cryptography x509 object."""
+    try:
+        cursor = conn.cursor()
+        serial_decimal = hex_to_decimal(serial_hex)
+        if serial_decimal is None:
+            raise ValueError("Invalid Serial Number")
+
+        query = "SELECT base64Cert FROM CertificateData WHERE serialNumber = %s;"
+        cursor.execute(query, (serial_decimal,))
+        result = cursor.fetchone()
+        cursor.close()
+
+        if not result:
+            raise ValueError("Certificate not found in database.")
+
+        b64_data = result[0]
+        # Ensure PEM formatting
+        if not b64_data.startswith("-----BEGIN CERTIFICATE-----"):
+            pem_data = f"-----BEGIN CERTIFICATE-----\n{b64_data}\n-----END CERTIFICATE-----"
+        else:
+            pem_data = b64_data
+
+        cert = load_pem_x509_certificate(pem_data.encode('utf-8'))
+        return cert
+    except Exception as e:
+        raise Exception(f"Failed to load cert from DB: {str(e)}")
+
+
+def fetch_issuer_cert(url):
+    """Downloads and loads the Issuer Certificate from a URL."""
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code != 200:
+            raise Exception(f"HTTP {response.status_code}")
+        
+        data = response.content
+        # Try loading as DER (common for .crt files in AIA)
+        try:
+            return x509.load_der_x509_certificate(data, default_backend())
+        except:
+            # Try loading as PEM
+            return x509.load_pem_x509_certificate(data, default_backend())
+            
+    except Exception as e:
+        raise Exception(f"Failed to download/load Issuer from {url}: {str(e)}")
+
+
+def check_ocsp_auto_from_db(conn, serial_hex, manual_ocsp_url=None):
+    """
+    1. Gets Cert from DB.
+    2. Extracts AIA (Issuer URL & OCSP URL).
+    3. Downloads Issuer.
+    4. Performs OCSP Check.
+    """
+    result_lines = []
+    result_lines.append(f"----- Automated OCSP Check for: {serial_hex} -----")
+    
+    try:
+        # 1. Get Cert from DB
+        try:
+            cert = get_cert_object_from_db(conn, serial_hex)
+            result_lines.append("✓ Found Certificate in Database.")
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+        # 2. Parse AIA for URLs
+        ocsp_url = manual_ocsp_url
+        issuer_url = None
+        
+        try:
+            aia = cert.extensions.get_extension_for_oid(ExtensionOID.AUTHORITY_INFORMATION_ACCESS).value
+            
+            # Get OCSP URL if not provided
+            if not ocsp_url:
+                ocsps = [ia for ia in aia if ia.access_method == AuthorityInformationAccessOID.OCSP]
+                if ocsps:
+                    ocsp_url = ocsps[0].access_location.value
+            
+            # Get Issuer URL
+            issuers = [ia for ia in aia if ia.access_method == AuthorityInformationAccessOID.CA_ISSUERS]
+            if issuers:
+                issuer_url = issuers[0].access_location.value
+                
+        except x509.ExtensionNotFound:
+            result_lines.append("! No AIA Extension found in certificate.")
+        except Exception as e:
+            result_lines.append(f"! Error parsing AIA: {str(e)}")
+
+        if not ocsp_url:
+            return "\n".join(result_lines) + "\nError: Could not determine OCSP URL from certificate."
+        
+        if not issuer_url:
+             return "\n".join(result_lines) + "\nError: Could not determine Issuer URL from certificate (AIA)."
+
+        result_lines.append(f"  > OCSP URL: {ocsp_url}")
+        result_lines.append(f"  > Issuer URL: {issuer_url}")
+
+        # 3. Download Issuer
+        try:
+            issuer_cert = fetch_issuer_cert(issuer_url)
+            result_lines.append("✓ Downloaded & Loaded Issuer Certificate.")
+        except Exception as e:
+            return "\n".join(result_lines) + f"\nError: Could not fetch Issuer Certificate. {str(e)}"
+
+        # 4. Perform OCSP Request
+        # Build Request (SHA1)
+        builder = OCSPRequestBuilder().add_certificate(cert, issuer_cert, hashes.SHA1())
+        req = builder.build()
+        
+        headers = {'Content-Type': 'application/ocsp-request'}
+        response = requests.post(ocsp_url, data=req.public_bytes(serialization.Encoding.DER), headers=headers, timeout=10)
+        
+        if response.status_code != 200:
+            result_lines.append(f"Error: OCSP Responder returned HTTP {response.status_code}")
+            return "\n".join(result_lines)
+
+        ocsp_resp = load_der_ocsp_response(response.content)
+        
+        # 5. Parse Response
+        result_lines.append(f"\n----- OCSP Response -----")
+        result_lines.append(f"Response Status: {ocsp_resp.response_status.name}")
+        
+        if ocsp_resp.response_status == OCSPResponseStatus.SUCCESSFUL:
+            result_lines.append(f"Cert Status: {ocsp_resp.certificate_status.name}")
+            
+            tz_offset = timedelta(hours=7)
+            
+            if ocsp_resp.certificate_status == OCSPCertStatus.REVOKED:
+                rev_time = ocsp_resp.revocation_time_utc + tz_offset
+                result_lines.append(f"Revocation Time (GMT+7): {rev_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                if ocsp_resp.revocation_reason:
+                    result_lines.append(f"Reason: {ocsp_resp.revocation_reason.name}")
+            
+            this_up = ocsp_resp.this_update_utc + tz_offset
+            result_lines.append(f"This Update (GMT+7): {this_up.strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            if ocsp_resp.next_update_utc:
+                next_up = ocsp_resp.next_update_utc + tz_offset
+                result_lines.append(f"Next Update (GMT+7): {next_up.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    except Exception as e:
+        result_lines.append(f"\nError: An unexpected error occurred: {str(e)}")
+
+    return "\n".join(result_lines)
 

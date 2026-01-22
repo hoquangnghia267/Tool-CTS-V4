@@ -7,7 +7,7 @@ from tkinter import messagebox
 from tkinter import scrolledtext
 from functions import (check_certificate_status, convert_timestamp_to_gmt7, decimal_to_hex, export_base64_certificates, get_text_data, get_text_single, note_hotro_tms1, query_info_cts, update_revoked_list, update_revoked_list_new, update_revoked_list_force,
                        block_tms1, block_tms2, unblock_tms1, unblock_tms2, notifications_tms2, off_notifications_tms1, off_notifications_tms2, 
-                       search_certificates_by_subject, query_cts_theo_tinh, notifications_tms1, get_info_TMS1, get_info_TMS2, update_unrevoked_list, hex_to_decimal, check_serial_in_crl, download_crl)
+                       search_certificates_by_subject, query_cts_theo_tinh, notifications_tms1, get_info_TMS1, get_info_TMS2, update_unrevoked_list, hex_to_decimal, check_serial_in_crl, download_crl, check_ocsp_by_serial, check_ocsp_auto_from_db)
 from tkinter import filedialog
 
 # Các hàm chức năng của ứng dụng
@@ -812,6 +812,49 @@ def open_check_serial_in_crl_window(parent):
 
     get_result_text = tk.Text(update_window, height=10, width=60, state=tk.DISABLED, font=("Helvetica", 10))
     get_result_text.grid(row=10, column=0, padx=10, pady=10)
+
+
+def open_check_ocsp_serial_window(parent, conn):
+    update_window = tk.Toplevel(parent)
+    update_window.title("Check OCSP (Serial Only - Auto)")
+    update_window.grab_set()
+
+    def do_check():
+        serial = get_text_single(serial_text)
+        ocsp_url = get_text_single(url_text)
+        
+        if not serial:
+             messagebox.showwarning("Warning", "Please enter a Serial Number.")
+             return
+
+        get_result_text.config(state=tk.NORMAL)
+        get_result_text.delete("1.0", tk.END)
+        get_result_text.insert(tk.END, "Checking OCSP (Fetching Cert & Issuer automatically)...\n")
+        update_window.update()
+        
+        # Use the new auto function
+        result = check_ocsp_auto_from_db(conn, serial, ocsp_url if ocsp_url else None)
+        
+        get_result_text.delete("1.0", tk.END)
+        get_result_text.insert(tk.END, result)
+        get_result_text.config(state=tk.DISABLED)
+
+    # --- UI Layout ---
+    tk.Label(update_window, text="Serial Number (Hex):").grid(row=0, column=0, padx=10, pady=(10,0), sticky="w")
+    serial_text = tk.Text(update_window, height=1, width=50)
+    serial_text.grid(row=1, column=0, padx=10, pady=5, sticky="w")
+    
+    # Removed manual Issuer File selection as it is now automated via AIA
+    
+    tk.Label(update_window, text="OCSP URL (Optional - leave empty to use AIA):").grid(row=5, column=0, padx=10, pady=(10,0), sticky="w")
+    url_text = tk.Text(update_window, height=1, width=50)
+    url_text.grid(row=6, column=0, padx=10, pady=5, sticky="w")
+    # url_text.insert(tk.END, "http://ocsp.smartsign.com.vn") # Optional default
+    
+    tk.Button(update_window, text="Check OCSP", command=do_check, font=("Helvetica", 10, "bold")).grid(row=7, column=0, padx=10, pady=15)
+    
+    get_result_text = tk.Text(update_window, height=15, width=70, state=tk.DISABLED, font=("Helvetica", 10))
+    get_result_text.grid(row=8, column=0, padx=10, pady=10)
 
 
 

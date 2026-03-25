@@ -1,6 +1,12 @@
 import datetime
 from datetime import datetime, timezone, timedelta
 import threading
+import csv
+try:
+    from openpyxl import Workbook
+    HAS_OPENPYXL = True
+except ImportError:
+    HAS_OPENPYXL = False
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
@@ -309,58 +315,162 @@ def open_query_list_serial(parent, conn):
 
     def fetch_data():
         input_data = input_text.get("1.0", tk.END).strip()
-        serial_numbers = input_data.split('\n')
+        serial_numbers = [sn.strip() for sn in input_data.split('\n') if sn.strip()]
         
         # Chuyển đổi các giá trị hex sang decimal
         decimal_serials = [hex_to_decimal(sn) for sn in serial_numbers]
 
         results = query_info_cts(conn, decimal_serials)
         
-        if results:
-            output_text.delete('1.0', tk.END)
+        # Xóa dữ liệu cũ trên Treeview
+        for i in tree.get_children():
+            tree.delete(i)
             
+        if results:
             found_serials = {str(row[0]) for row in results}  # Tạo tập hợp các serial number tìm thấy
             
             for row in results:
                 serial_hex = decimal_to_hex(row[0])
-                expire_date = row[3]
+                status = row[1]
                 revoke_date = row[2]
+                expire_date = row[3]
                 subject_DN = row[4]
                 username = row[5]
                 expire_date_gmt7 = convert_timestamp_to_gmt7(expire_date)
+                revoke_date_gmt7 = convert_timestamp_to_gmt7(revoke_date) if revoke_date and revoke_date != -1 else "N/A"
 
-                #output_text.insert(tk.END, f"SerialNumber: {serial_hex} - SubjectDN: {subject_DN}\n")
-                #output_text.insert(tk.END, f"SerialNumber: {serial_hex} - Status: {row[1]} - ExpireDate: {expire_date_gmt7} - RevocationDate: {revoke_date}\n")
-                output_text.insert(tk.END, f"SerialNumber: {serial_hex} - Status: {row[1]} - SubjectDN: {subject_DN} - Username: {username}\n")
-                #output_text.insert(tk.END, f"SerialNumber: {serial_hex} - Status: {row[1]} - ExpireDate: {expire_date_gmt7}\n")  
+                values = (serial_hex, status, username, expire_date_gmt7, revoke_date_gmt7, subject_DN)
+                tree.insert("", tk.END, values=values)
 
             # Tìm các serial number không có trong kết quả
             not_found_serials = [sn for sn in serial_numbers if str(hex_to_decimal(sn)) not in found_serials]
             
             if not_found_serials:
-                output_text.insert(tk.END, "\nSerials not found in database:\n")
                 for sn in not_found_serials:
-                    output_text.insert(tk.END, f"{sn}\n")
+                    tree.insert("", tk.END, values=(sn, "NOT FOUND", "", "", "", ""), tags=('not_found',))
+                tree.tag_configure('not_found', foreground='red')
         else:
             messagebox.showinfo("No Results", "No data found for the provided serial numbers.")
 
+    def export_to_excel():
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            title="Export to CSV"
+        )
+        if not file_path:
+            return
+        
+        try:
+            with open(file_path, mode='w', newline='', encoding='utf-8-sig') as f:
+                writer = csv.writer(f)
+                headers = ["SerialNumber", "Status", "Username", "ExpireDate", "RevocationDate", "SubjectDN"]
+                writer.writerow(headers)
+                for row_id in tree.get_children():
+                    row_values = tree.item(row_id)['values']
+                    writer.writerow(row_values)
+            messagebox.showinfo("Export Success", f"Dữ liệu đã được xuất ra file: {file_path}")
+        except Exception as e:
+            messagebox.showerror("Export Error", f"Lỗi khi xuất file: {e}")
 
+    def export_to_xlsx():
+        if not HAS_OPENPYXL:
+            messagebox.showerror("Error", "Thư viện 'openpyxl' chưa được cài đặt. Vui lòng chạy: pip install openpyxl")
+            return
+
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".xlsx",
+            filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+            title="Export to XLSX"
+        )
+        if not file_path:
+            return
+        
+        try:
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Certificates"
+            
+            headers = ["SerialNumber", "Status", "Username", "ExpireDate", "RevocationDate", "SubjectDN"]
+            ws.append(headers)
+            
+            for row_id in tree.get_children():
+                row_values = tree.item(row_id)['values']
+                ws.append(list(row_values))
+                
+            wb.save(file_path)
+            messagebox.showinfo("Export Success", f"Dữ liệu đã được xuất ra file: {file_path}")
+        except Exception as e:
+            messagebox.showerror("Export Error", f"Lỗi khi xuất file: {e}")
+
+    def copy_selection(event=None):
+        selected_items = tree.selection()
+        if not selected_items:
+            selected_items = tree.get_children()
+            
+        if selected_items:
+            lines = []
+            for item_id in selected_items:
+                values = tree.item(item_id, 'values')
+                lines.append("\t".join(map(str, values)))
+            clipboard_content = "\n".join(lines)
+            update_window.clipboard_clear()
+            update_window.clipboard_append(clipboard_content)
+            update_window.update()
 
     # Tạo giao diện Tkinter
     update_window = tk.Toplevel(parent)
-    update_window.title("Database Query.")
+    update_window.title("Check multiple certificates")
+    update_window.geometry("1400x800")
 
-    tk.Label(update_window, text="Enter Serial Numbers (hex, one per line):").pack()
+    # Frame trên: Nhập dữ liệu
+    top_frame = tk.Frame(update_window)
+    top_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=5)
+    
+    tk.Label(top_frame, text="Enter Serial Numbers (hex, one per line):").pack(anchor=tk.W)
+    input_text = scrolledtext.ScrolledText(top_frame, width=40, height=8)
+    input_text.pack(fill=tk.X, pady=5)
 
-    input_text = scrolledtext.ScrolledText(update_window, width=40, height=20)
-    input_text.pack(padx=10, pady=10)
+    # Frame giữa: Các nút chức năng
+    btn_frame = tk.Frame(update_window)
+    btn_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=5)
+    
+    tk.Button(btn_frame, text="Fetch Data", command=fetch_data, bg="lightblue").pack(side=tk.LEFT, padx=5)
+    tk.Button(btn_frame, text="Export to CSV", command=export_to_excel, bg="lightgreen").pack(side=tk.LEFT, padx=5)
+    tk.Button(btn_frame, text="Export to XLSX", command=export_to_xlsx, bg="#FFD700").pack(side=tk.LEFT, padx=5)
+    tk.Label(btn_frame, text="(Ctrl+C to copy selected rows)").pack(side=tk.LEFT, padx=20)
 
-    tk.Button(update_window, text="Fetch Data", command=fetch_data).pack()
+    # Frame dưới: Bảng hiển thị kết quả
+    bottom_frame = tk.Frame(update_window)
+    bottom_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-    tk.Label(update_window, text="Results:").pack()
+    columns = ("SerialNumber", "Status", "Username", "ExpireDate", "RevocationDate", "SubjectDN")
+    tree = ttk.Treeview(bottom_frame, columns=columns, show='headings')
+    
+    # Định nghĩa tiêu đề và độ rộng cột
+    tree.heading("SerialNumber", text="Serial Number")
+    tree.heading("Status", text="Status")
+    tree.heading("Username", text="Username")
+    tree.heading("ExpireDate", text="Expire Date")
+    tree.heading("RevocationDate", text="Revocation Date")
+    tree.heading("SubjectDN", text="Subject DN")
+    
+    tree.column("SerialNumber", width=150, anchor=tk.CENTER)
+    tree.column("Status", width=100, anchor=tk.CENTER)
+    tree.column("Username", width=150, anchor=tk.W)
+    tree.column("ExpireDate", width=150, anchor=tk.CENTER)
+    tree.column("RevocationDate", width=150, anchor=tk.CENTER)
+    tree.column("SubjectDN", width=400, anchor=tk.W)
+    
+    tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-    output_text = scrolledtext.ScrolledText(update_window, width=200, height=30)
-    output_text.pack(padx=10, pady=10)
+    # Scrollbar
+    scrollbar = ttk.Scrollbar(bottom_frame, orient=tk.VERTICAL, command=tree.yview)
+    tree.configure(yscroll=scrollbar.set)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+    # Bind Ctrl+C
+    tree.bind("<Control-c>", copy_selection)
 
 
 def open_convert_timestamp(parent):

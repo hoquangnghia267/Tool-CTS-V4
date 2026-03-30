@@ -1,0 +1,28 @@
+1. Mô tả cơ chế xử lý Log của TMS2
+Công cụ này được thiết kế để theo dõi file log của JBoss (server.log) và thực hiện "làm giàu dữ liệu" (data enrichment) trước khi đẩy về server log tập trung.
+   * Bước 1 - Trích xuất dữ liệu thô: Chương trình sử dụng Regex để bắt các dòng có mức độ INFO và tìm kiếm từ khóa tokenCode=... trong nội dung log.
+   * Bước 2 - Chuyển đổi sang định danh (Username): Thay vì gửi mã tokenCode, hàm getTokenHid(tokenCode) sẽ thực hiện:
+       * Kiểm tra trong file token_cache.json xem đã từng tra cứu mã này chưa.
+       * Nếu chưa có, nó sẽ kết nối đến MySQL để tìm
+   * Bước 3 - Lưu đệm và Gửi: Kết quả sau khi chuyển đổi được lưu vào file đệm log_buffer.ndjson và gửi lên API theo từng đợt (Batch) 50 dòng một để tối ưu hiệu suất.
+
+2. Chi tiết truy vấn Database
+Hệ thống sử dụng database tmsv2basic để thực hiện việc ánh xạ.
+   * Bảng dữ liệu: token_ms
+   * Câu lệnh truy vấn chính (được dùng trong code):
+     SELECT token_hid FROM token_ms WHERE token_code = ? LIMIT 1;
+     (Trong đó ? là giá trị tokenCode trích xuất được từ log (ví dụ: 139851).)
+	 
+	 
+3. Cách lấy MST
+Ví dụ để lấy 1 dữ liệu từ cột cert_sub_dn trong bảng cert_ms là: 
+UID=MST:0314216592,CN=CÔNG TY TNHH MỘT THÀNH VIÊN DỊCH VỤ Y KHOA SIÊU ÂM CHẨN ĐOÁN,O=CKSVN001,L=Q.07,ST=HỒ CHÍ MINH,C=VN
+
+    * Dùng hàm SUBSTRING_INDEX (Tương thích với mọi phiên bản MySQL):
+    SELECT
+        SUBSTRING_INDEX(SUBSTRING_INDEX(cert_sub_dn, 'UID=MST:', -1), ',', 1) AS MST
+    FROM cert_ms
+    WHERE cert_sub_dn LIKE '%UID=MST:%';
+    Giải thích:
+       * Lệnh bên trong lấy phần nội dung nằm sau chuỗi UID=MST:.
+       * Lệnh bên ngoài lấy phần nội dung phía trước dấu phẩy , đầu tiên kể từ kết quả trên.

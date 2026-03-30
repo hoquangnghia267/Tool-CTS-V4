@@ -153,7 +153,7 @@ def query_info_cts(conn, decimal_serials):
         # Chuyển đổi các giá trị decimal sang chuỗi có dấu nháy đơn
         formatted_serials = "','".join(str(sn) for sn in decimal_serials)
         query = f"""
-            SELECT serialNumber, status, revocationDate, expireDate, subjectDN, username
+            SELECT serialNumber, status, revocationDate, expireDate, subjectDN, username, notBefore
             FROM CertificateData
             WHERE serialNumber IN ('{formatted_serials}')
         """
@@ -779,7 +779,7 @@ def query_database(conn, serial_entry, result_text):
 
     if serial_decimal is not None:
         query = """
-            SELECT serialNumber, status, revocationDate, expireDate, subjectDN
+            SELECT serialNumber, status, revocationDate, expireDate, subjectDN, notBefore
             FROM CertificateData 
             WHERE serialNumber = '%s';
         """
@@ -794,14 +794,14 @@ def query_database(conn, serial_entry, result_text):
                 revocation_date = row[2]
                 expire_date = row[3]
                 subjectDN = row[4]
-                # notBefore = row[5]
-                # notBefore_gmt7 = convert_timestamp_to_gmt7(notBefore)
+                notBefore = row[5]
+                notBefore_gmt7 = convert_timestamp_to_gmt7(notBefore)
                 expire_date_gmt7 = convert_timestamp_to_gmt7(expire_date)
                 if revocation_date != -1:
                     revocation_date_gmt7 = convert_timestamp_to_gmt7(revocation_date)
-                    result_str += f"Serial: {serial_hex}\nStatus: {status}\nRevocation Date (GMT+07): {revocation_date_gmt7}\nValid to: {expire_date_gmt7}\nSubjectDN: {subjectDN}\n"                    
+                    result_str += f"Serial: {serial_hex}\nStatus: {status}\nRevocation Date (GMT+07): {revocation_date_gmt7}\nValid from: {notBefore_gmt7}\nValid to: {expire_date_gmt7}\nSubjectDN: {subjectDN}\n"                    
                 else:
-                    result_str += f"Serial: {serial_hex}\nStatus: {status}\nRevocation Date: {revocation_date}\nValid to: {expire_date_gmt7}\nSubjectDN: {subjectDN}\n"
+                    result_str += f"Serial: {serial_hex}\nStatus: {status}\nRevocation Date: {revocation_date}\nValid from: {notBefore_gmt7}\nValid to: {expire_date_gmt7}\nSubjectDN: {subjectDN}\n"
                     
             result_text.config(state=tk.NORMAL)
             result_text.delete(1.0, tk.END)

@@ -336,10 +336,12 @@ def open_query_list_serial(parent, conn):
                 expire_date = row[3]
                 subject_DN = row[4]
                 username = row[5]
+                notBefore = row[6]
                 expire_date_gmt7 = convert_timestamp_to_gmt7(expire_date)
                 revoke_date_gmt7 = convert_timestamp_to_gmt7(revoke_date) if revoke_date and revoke_date != -1 else "N/A"
+                notBefore_gmt7 = convert_timestamp_to_gmt7(notBefore) if notBefore and notBefore != -1 else "N/A"
 
-                values = (serial_hex, status, username, expire_date_gmt7, revoke_date_gmt7, subject_DN)
+                values = (serial_hex, status, username, notBefore_gmt7, expire_date_gmt7, revoke_date_gmt7, subject_DN)
                 tree.insert("", tk.END, values=values)
 
             # Tìm các serial number không có trong kết quả
@@ -347,7 +349,7 @@ def open_query_list_serial(parent, conn):
             
             if not_found_serials:
                 for sn in not_found_serials:
-                    tree.insert("", tk.END, values=(sn, "NOT FOUND", "", "", "", ""), tags=('not_found',))
+                    tree.insert("", tk.END, values=(sn, "NOT FOUND", "", "", "", "", ""), tags=('not_found',))
                 tree.tag_configure('not_found', foreground='red')
         else:
             messagebox.showinfo("No Results", "No data found for the provided serial numbers.")
@@ -364,7 +366,7 @@ def open_query_list_serial(parent, conn):
         try:
             with open(file_path, mode='w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
-                headers = ["SerialNumber", "Status", "Username", "ExpireDate", "RevocationDate", "SubjectDN"]
+                headers = ["SerialNumber", "Status", "Username", "NotBefore", "ExpireDate", "RevocationDate", "SubjectDN"]
                 writer.writerow(headers)
                 for row_id in tree.get_children():
                     row_values = tree.item(row_id)['values']
@@ -391,7 +393,7 @@ def open_query_list_serial(parent, conn):
             ws = wb.active
             ws.title = "Certificates"
             
-            headers = ["SerialNumber", "Status", "Username", "ExpireDate", "RevocationDate", "SubjectDN"]
+            headers = ["SerialNumber", "Status", "Username", "NotBefore", "ExpireDate", "RevocationDate", "SubjectDN"]
             ws.append(headers)
             
             for row_id in tree.get_children():
@@ -417,6 +419,17 @@ def open_query_list_serial(parent, conn):
             update_window.clipboard_clear()
             update_window.clipboard_append(clipboard_content)
             update_window.update()
+
+    def sort_column(col, reverse):
+        l = [(tree.set(k, col), k) for k in tree.get_children('')]
+        l.sort(reverse=reverse)
+
+        # rearrange items in sort order
+        for index, (val, k) in enumerate(l):
+            tree.move(k, '', index)
+
+        # reverse sort next time
+        tree.heading(col, command=lambda: sort_column(col, not reverse))
 
     # Tạo giao diện Tkinter
     update_window = tk.Toplevel(parent)
@@ -444,13 +457,17 @@ def open_query_list_serial(parent, conn):
     bottom_frame = tk.Frame(update_window)
     bottom_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-    columns = ("SerialNumber", "Status", "Username", "ExpireDate", "RevocationDate", "SubjectDN")
+    columns = ("SerialNumber", "Status", "Username", "NotBefore", "ExpireDate", "RevocationDate", "SubjectDN")
     tree = ttk.Treeview(bottom_frame, columns=columns, show='headings')
     
     # Định nghĩa tiêu đề và độ rộng cột
+    for col in columns:
+        tree.heading(col, text=col, command=lambda c=col: sort_column(c, False))
+    
     tree.heading("SerialNumber", text="Serial Number")
     tree.heading("Status", text="Status")
     tree.heading("Username", text="Username")
+    tree.heading("NotBefore", text="Not Before")
     tree.heading("ExpireDate", text="Expire Date")
     tree.heading("RevocationDate", text="Revocation Date")
     tree.heading("SubjectDN", text="Subject DN")
@@ -458,6 +475,7 @@ def open_query_list_serial(parent, conn):
     tree.column("SerialNumber", width=150, anchor=tk.CENTER)
     tree.column("Status", width=100, anchor=tk.CENTER)
     tree.column("Username", width=150, anchor=tk.W)
+    tree.column("NotBefore", width=150, anchor=tk.CENTER)
     tree.column("ExpireDate", width=150, anchor=tk.CENTER)
     tree.column("RevocationDate", width=150, anchor=tk.CENTER)
     tree.column("SubjectDN", width=400, anchor=tk.W)
